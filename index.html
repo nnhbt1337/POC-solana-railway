@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>POC Solana - Envoyer SOL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- CDN IIFE de @solana/web3.js : expose window.solanaWeb3 -->
+    <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <style>
+      body { font-family: system-ui, Arial; margin: 2rem; }
+      button { padding: 0.7rem 1rem; font-size: 1rem; }
+      .log { margin-top: 1rem; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>POC Solana</h1>
+    <p>Un bouton pour envoyer 0.01 SOL à une adresse de réception.</p>
+
+    <label>
+      Adresse de réception (PublicKey):
+      <input id="recipient" type="text" size="60" placeholder="Ex: 9x.. (PublicKey)" />
+    </label>
+    <br /><br />
+    <button id="connect">Connecter Phantom</button>
+    <button id="pay">Envoyer 0.01 SOL</button>
+
+    <div class="log" id="log"></div>
+
+    <script>
+      const log = (msg) => {
+        const el = document.getElementById("log");
+        el.textContent += `\n${msg}`;
+      };
+
+      const connection = new solanaWeb3.Connection("https://api.devnet.solana.com"); // Devnet pour tests
+      let fromPubkey = null;
+
+      document.getElementById("connect").onclick = async () => {
+        try {
+          const provider = window.solana;
+          if (!provider?.isPhantom) {
+            alert("Installe Phantom pour continuer.");
+            return;
+          }
+          const resp = await provider.connect();
+          fromPubkey = resp.publicKey;
+          log(`Connecté: ${fromPubkey.toString()}`);
+        } catch (e) {
+          log(`Erreur connexion: ${e.message}`);
+        }
+      };
+
+      document.getElementById("pay").onclick = async () => {
+        try {
+          if (!fromPubkey) {
+            alert("Connecte ton wallet Phantom d'abord.");
+            return;
+          }
+          const recipientStr = document.getElementById("recipient").value.trim();
+          if (!recipientStr) {
+            alert("Renseigne l'adresse de réception.");
+            return;
+          }
+
+          const toPubkey = new solanaWeb3.PublicKey(recipientStr);
+
+          const tx = new solanaWeb3.Transaction().add(
+            solanaWeb3.SystemProgram.transfer({
+              fromPubkey,
+              toPubkey,
+              lamports: Math.floor(0.01 * 1e9), // 0.01 SOL
+            })
+          );
+
+          tx.feePayer = fromPubkey;
+          const { blockhash } = await connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash;
+
+          const signed = await window.solana.signTransaction(tx);
+          const txid = await connection.sendRawTransaction(signed.serialize());
+          log(`Tx envoyée: ${txid}`);
+          log(`Explorer: https://explorer.solana.com/tx/${txid}?cluster=devnet`);
+
+          // Optionnel: confirmer
+          const conf = await connection.confirmTransaction(txid, "confirmed");
+          log(`Confirmation: ${JSON.stringify(conf.value)}`);
+        } catch (e) {
+          log(`Erreur paiement: ${e.message}`);
+        }
+      };
+    </script>
+  </body>
+</html>
